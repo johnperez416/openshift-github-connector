@@ -45,7 +45,7 @@
     "@octokit/core": "^3.4.0",
     "@octokit/plugin-paginate-rest": "^2.13.3",
     "@patternfly/patternfly": "^4.103.6",
-    "@patternfly/react-core": "^4.121.1",
+    "@patternfly/react-core": "^4.128.2",
     "@patternfly/react-icons": "^4.10.7",
     "@patternfly/react-table": "^4.27.7",
     "bootstrap": "^4",
