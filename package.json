@@ -43,7 +43,7 @@
     "@kubernetes/client-node": "^0.14.0",
     "@octokit/auth-app": "^3.4.0",
     "@octokit/core": "^3.4.0",
-    "@octokit/plugin-paginate-rest": "^2.13.3",
+    "@octokit/plugin-paginate-rest": "^2.13.5",
     "@patternfly/patternfly": "^4.103.6",
     "@patternfly/react-core": "^4.121.1",
     "@patternfly/react-icons": "^4.10.7",
