@@ -1,19 +1,17 @@
 import express from "express";
 
 import ApiEndpoints from "common/api-endpoints";
-import { send405, sendError } from "server/util/send-error";
 import ApiResponses from "common/api-responses";
 import Log from "server/logger";
-import GitHubApp from "server/lib/github/gh-app";
-import User from "server/lib/user";
+import { send405 } from "server/express-extends";
+import GitHubAppSerializer from "server/lib/github/gh-app-serializer";
 
 const router = express.Router();
 
-// cluster app state
-router.route(ApiEndpoints.App.Existing.path)
-  .get(async (req, res: express.Response<ApiResponses.AllAppsState>, next) => {
+router.route(ApiEndpoints.App.Root.path)
+  .get(async (req, res: express.Response<ApiResponses.ClusterAppState>, next) => {
 
-    const apps = await GitHubApp.loadAll();
+    const apps = await GitHubAppSerializer.loadAll();
 
     // no way to detect app public/private ?
     // const publicApps = apps?.filter((app) => {
@@ -30,11 +28,10 @@ router.route(ApiEndpoints.App.Existing.path)
 
     Log.info(`There are ${apps.length} apps`);
 
-    const resBody: ApiResponses.AllAppsState = {
+    const resBody: ApiResponses.ClusterAppState = {
       success: true,
       totalCount: apps.length,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      visibleApps: apps.filter((_app) => true).map((app) => {
+      visibleApps: apps.map((app) => {
         return {
           appId: app.id,
           appUrl: app.urls.app,
@@ -48,32 +45,54 @@ router.route(ApiEndpoints.App.Existing.path)
             html_url: app.config.owner.html_url,
           },
         };
+      }).sort((a, b) => {
+        // sort newest -> oldest
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       }),
     };
 
     return res.json(resBody);
-  })
+  });
+
+const PARAM_APPID = "appId";
+
+router.route(ApiEndpoints.App.Root.path + "/:" + PARAM_APPID)
   .delete(async (req, res: express.Response<ApiResponses.RemovalResult>, next) => {
-    const installation = await User.getInstallationForSession(req, res);
-    if (!installation) {
+    const user = await req.getUserOr401();
+    if (!user) {
       return undefined;
     }
 
-    if (installation.user.ownsAppId !== installation.app.id) {
-      return sendError(
-        res, 403,
-        `User ${installation.user.name} does not own ${installation.app.config.name}, and so cannot delete it.`
+    if (!req.params[PARAM_APPID]) {
+      return res.sendError(400, `App ID not provided in request path`);
+    }
+
+    const appId = Number(req.params[PARAM_APPID]);
+
+    if (Number.isNaN(appId)) {
+      return res.sendError(400, `Invalid app ID "${appId}" provided in request path`);
+    }
+
+    const app = await GitHubAppSerializer.load(appId);
+    if (!app) {
+      return res.sendError(404, `App ${appId} not found`);
+    }
+
+    if (!user.ownsAppIds.includes(app.id)) {
+      return res.sendError(
+        403,
+        `User ${user.name} does not own app ${appId}, and so cannot delete it.`
       );
     }
 
-    await installation.app.delete(installation.user);
+    await GitHubAppSerializer.remove(app, user);
 
     return res.json({
       removed: true,
-      message: `Removed ${installation.app.config.name}`,
+      message: `Removed ${app.config.name}`,
       success: true,
     });
   })
-  .all(send405([ "GET", "DELETE" ]));
+  .all(send405([ "DELETE" ]));
 
 export default router;

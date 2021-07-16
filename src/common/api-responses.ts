@@ -6,12 +6,13 @@ import {
   GitHubRepo,
   GitHubActionsSecret,
   GitHubRepoId,
-  GitHubUserData,
+  GitHubUserDetails,
   GitHubAppInstallationUrls,
   GitHubAppPublicData,
   GitHubAppConfigNoSecrets,
 } from "./types/gh-types";
 import ImageRegistry from "./types/image-registries";
+import { ConnectorUserInfo, OpenShiftUserInfo } from "./types/user-types";
 
 namespace ApiResponses {
 
@@ -24,13 +25,14 @@ namespace ApiResponses {
     severity: Severity,
   }
 
-  export interface ResultSuccess extends ResultWithSeverity {
+  export interface ResultSuccess extends Result {
     success: true,
+    severity?: "success" | "info",
   }
 
-  export interface ResultFailed extends ResultWithSeverity {
+  export interface ResultFailed extends Result {
     success: false,
-    severity: "warning" | "danger",
+    severity?: "warning" | "danger",
   }
 
   export interface Error extends ResultFailed {
@@ -45,6 +47,7 @@ namespace ApiResponses {
 
   export interface CreatingAppResponse extends Result {
     appInstallUrl: string,
+    appName: string,
   }
 
   export interface ExistingAppData {
@@ -62,7 +65,7 @@ namespace ApiResponses {
     },
   }
 
-  export type AllAppsState = {
+  export type ClusterAppState = {
     success: true,
     totalCount: number,
     visibleApps: ExistingAppData[],
@@ -121,10 +124,16 @@ namespace ApiResponses {
     removed: boolean,
   }
 
+  export type OpenShiftUser = OpenShiftUserInfo & ResultSuccess;
+  export type OpenShiftUserResponse = OpenShiftUser | ResultFailed;
+
+  export type User = ConnectorUserInfo & ResultSuccess;
+  export type UserResponse = User | ResultFailed;
+
   // extending githubuser type here in case we want to add more fields to this response later
 
   // eslint-disable-next-line @typescript-eslint/no-empty-interface
-  export interface GitHubUserResponse extends GitHubUserData {
+  export interface GitHubUserDetailsResponse extends GitHubUserDetails {
 
   }
 
@@ -179,6 +188,11 @@ namespace ApiResponses {
     //   secretName: string,
     //   created: boolean,
     // }[],
+    serviceAccount: {
+      created: boolean,
+      name: string,
+      namespace: string,
+    },
     successes?: RepoSecretCreationSuccess[],
     failures?: RepoSecretCreationFailure[],
   }
@@ -215,14 +229,21 @@ namespace ApiResponses {
 
   export type ClusterState = ClusterStateDisconnected | ClusterStateConnected;
 
-  // eslint-disable-next-line @typescript-eslint/no-empty-interface
+  export interface UserNamespaces {
+    namespaces: string[],
+  }
+
+  export interface UserNamespacedServiceAccounts {
+    namespace: string,
+    serviceAccounts: string[],
+  }
+
   interface ImageRegistryCreationSuccess extends ResultSuccess {
     registry: ImageRegistry.Info,
   }
 
   export type ImageRegistryCreationResult = ImageRegistryCreationSuccess | ResultFailed;
 
-  // eslint-disable-next-line @typescript-eslint/no-empty-interface
   interface ImageRegistryListSuccess extends ResultSuccess {
     registries: ImageRegistry.List,
     registryPasswordSecretName: string,

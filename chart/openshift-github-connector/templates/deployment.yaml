@@ -21,18 +21,39 @@ spec:
       volumes:
         - emptyDir: {}
           name: tmp
-        - name: console-serving-cert
+
+        # - emptyDir: {}
+        #   name: certs
+
+        - name: {{ .Values.servingCertSecret }}
           secret:
-            secretName: console-serving-cert
+            secretName: {{ .Values.servingCertSecret }}
             defaultMode: 420
+
+        {{- $addOAuthCert := lookup "v1" "Secret" .Release.Namespace "v4-0-config-system-router-certs" }}
+        {{- if $addOAuthCert }}
+        - name: oauth-route-cert
+          secret:
+            secretName: v4-0-config-system-router-certs
+            defaultMode: 420
+        {{ end }}
+
+        {{- $addApiServerCert := lookup "v1" "Secret" .Release.Namespace "service-network-serving-signer" }}
+        {{- if $addApiServerCert }}
+        - name: apiserver-cert
+          secret:
+            secretName: service-network-serving-signer
+            defaultMode: 420
+        {{ end }}
 
       containers:
         - name: {{ .Values.appName }}
           imagePullPolicy: Always
           image: {{ .Values.serverImage }}:{{ .Values.serverTag }}
+          # command: [ "sleep", "infinity" ]
           ports:
-            - name: {{ .Values.serverHttpPortName }}
-              containerPort: {{ .Values.serverHttpPort }}
+            # - name: {{ .Values.serverHttpPortName }}
+            #   containerPort: {{ .Values.serverHttpPort }}
             - name: {{ .Values.serverHttpsPortName }}
               containerPort: {{ .Values.serverHttpsPort }}
 
@@ -55,9 +76,24 @@ spec:
             - mountPath: /tmp
               name: tmp
 
-            - name: console-serving-cert
+            # - mountPath: /var/certs
+            #   name: certs
+
+            - name: {{ .Values.servingCertSecret }}
               readOnly: true
-              mountPath: /var/serving-cert
+              mountPath: {{ .Values.servingCADirectory }}
+
+            {{- if $addOAuthCert }}
+            - name: oauth-route-cert
+              readOnly: true
+              mountPath: {{ .Values.oauthCADirectory }}
+            {{ end }}
+
+            {{- if $addApiServerCert }}
+            - name: apiserver-cert
+              readOnly: true
+              mountPath: {{ .Values.apiserverCADirectory }}
+            {{ end }}
 
           env:
             - name: CLUSTER_API_SERVER
@@ -74,6 +110,17 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secretName }}
                   key: {{ .Values.oauthClientSecretKeyName }}
+
+            - name: OAUTH_CALLBACK_URL
+              value: {{ tpl .Values.oauthCallbackUrl . | quote }}
+
+            - name: SERVING_CA_DIRECTORY
+              value: {{ .Values.servingCADirectory }}
+
+            {{- if or $addOAuthCert $addApiServerCert }}
+            - name: SECRETS_CA_DIRECTORIES
+              value: {{ printf "%s,%s" .Values.oauthCADirectory .Values.apiserverCADirectory | quote }}
+            {{ end }}
 
             - name: SESSION_SECRET
               valueFrom:

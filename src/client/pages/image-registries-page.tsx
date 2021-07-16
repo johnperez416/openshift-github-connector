@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import { useState, useRef } from "react";
 import classNames from "classnames";
 import {
   Card, CardBody, CardTitle, Checkbox,
@@ -7,9 +7,7 @@ import {
 import { Table } from "@patternfly/react-table";
 import { v4 as uuid } from "uuid";
 
-import {
-  ExternalLinkAltIcon, PlusIcon, SyncAltIcon, TimesIcon,
-} from "@patternfly/react-icons";
+import { ExternalLinkAltIcon } from "@patternfly/react-icons";
 import ImageRegistry from "../../common/types/image-registries";
 import { ExternalLink } from "../components/external-link";
 import { TooltipIcon } from "../components/tooltip-icon";
@@ -19,32 +17,30 @@ import BtnBody from "../components/btn-body";
 import { fetchJSON } from "../util/client-util";
 import ApiEndpoints from "../../common/api-endpoints";
 import ApiRequests from "../../common/api-requests";
-import SetupPageHeader from "./setup/setup-header";
 import DataFetcher from "../components/data-fetcher";
 import { containsBannedCharacters } from "../../common/common-util";
+import { CommonIcons } from "../util/icons";
 
 export default function ImageRegistriesPage(): JSX.Element {
 
   return (
-    <React.Fragment>
-      <SetupPageHeader pageIndex={4} canProceed={true} />
-
+    <>
       <DataFetcher type="api" endpoint={ApiEndpoints.User.ImageRegistries} loadingDisplay="card">{
         (registriesRes: ApiResponses.ImageRegistryListResult, reload) => {
 
           return (
-            <React.Fragment>
+            <>
               <Card>
                 <CardTitle>
                   <div>
                   Container Image Registries
                   </div>
-                  <div className="ml-auto">
+                  <div className="ms-auto">
 
                     <Button variant="primary"
                       onClick={reload}
                     >
-                      <BtnBody icon={SyncAltIcon} text="Reload"/>
+                      <BtnBody icon={CommonIcons.Reload} text="Reload"/>
                     </Button>
                   </div>
                 </CardTitle>
@@ -71,20 +67,6 @@ export default function ImageRegistriesPage(): JSX.Element {
                       return (
                         <Table borders={true}>
                           <thead className="">
-                            {/* <colgroup className="row">
-                              <col className="col-2"></col>
-                              <col className="col-2"></col>
-                              <col className="col-3"></col>
-                              <col className="col-3"></col>
-                              <col className="col-2"></col>
-                            </colgroup> */}
-                            {/* <tr className="d-flex">
-                              <th className="col-3">Hostname</th>
-                              <th className="col-2">Namespace</th>
-                              <th className="col-3">Full Path</th>
-                              <th className="col-3">Username</th>
-                              <th className="col-2"></th>
-                            </tr> */}
                             <tr className="">
                               {/* <th scope="col" className="">Hostname</th>
                               <th scope="col" className="">Namespace</th> */}
@@ -106,13 +88,13 @@ export default function ImageRegistriesPage(): JSX.Element {
               </Card>
 
               <CreateImageRegistryCard onChange={reload}/>
-            </React.Fragment>
+            </>
           );
         }
       }
       </DataFetcher>
 
-    </React.Fragment>
+    </>
   );
 }
 
@@ -124,13 +106,13 @@ function ImageRegistryRow({ registry, onChange }: { registry: ImageRegistry.Info
       {/* <td>{registry.type}</td> */}
       {/* <td>{registry.hostname}</td>
       <td>{registry.namespace}</td> */}
-      {/* <td className="h-100 d-flex align-items-center justify-content-between"> */}
+      {/* <td className="h-100 center-y justify-content-between"> */}
       <td>
         <div className="w-100">
           {registry.fullPath}
         </div>
         <div className="text-right">
-          <ExternalLink href={"https://" + registry.fullPath} icon={{ position: "right", icon: ExternalLinkAltIcon }} />
+          <ExternalLink href={"https://" + registry.fullPath} icon={{ position: "right", Icon: ExternalLinkAltIcon }} />
         </div>
       </td>
       <td >{registry.username}</td>
@@ -151,7 +133,7 @@ function ImageRegistryRow({ registry, onChange }: { registry: ImageRegistry.Info
             setIsDeleting(false);
           }
         }}>
-          <BtnBody icon={TimesIcon} title="Remove" isLoading={isDeleting}/>
+          <BtnBody icon={CommonIcons.Delete} title="Remove" isLoading={isDeleting}/>
         </Button>
       </td>
     </tr>
@@ -286,7 +268,7 @@ function CreateImageRegistryCard({ onChange }: { onChange: () => Promise<void> }
                 label="Namespace"
                 labelIcon={
                   <TooltipIcon title="Registry Namespace" body={(
-                    <React.Fragment>
+                    <>
                       <p>
                        The namespace is the first segment of the registry path, between the first and second slashes.
                       </p>
@@ -299,7 +281,7 @@ function CreateImageRegistryCard({ onChange }: { onChange: () => Promise<void> }
                        The registry hostname is &quot;ghcr.io&quot;, and
                        the namespace is <span className="b">&quot;redhat-actions&quot;</span>.
                       </p>
-                    </React.Fragment>
+                    </>
                   )}
                   />
                 }
@@ -385,7 +367,7 @@ function CreateImageRegistryCard({ onChange }: { onChange: () => Promise<void> }
 
               <Checkbox
                 label={
-                  <div className="d-flex align-items-center">
+                  <div className="center-y">
                     Use built-in Actions workflow token
                     <ExternalLink
                       className="mx-2"
@@ -402,9 +384,9 @@ function CreateImageRegistryCard({ onChange }: { onChange: () => Promise<void> }
               />
             </FormGroup>
 
-            <div className="mt-3 d-flex justify-content-center align-items-center">
-              <Button isLarge type="submit">
-                <BtnBody text="Add Image Registry" icon={PlusIcon} />
+            <div className="mt-3 center-x align-items-center">
+              <Button type="submit">
+                <BtnBody text="Add Image Registry" icon={CommonIcons.Add} />
               </Button>
             </div>
           </Form>
@@ -445,7 +427,7 @@ function SubmissionStatusBanner(props: {
   }
 
   return (
-    <React.Fragment>
+    <>
       <Banner
         className="my-3"
         id={props.bannerId}
@@ -459,6 +441,6 @@ function SubmissionStatusBanner(props: {
 
         ) : ("")
       } */}
-    </React.Fragment>
+    </>
   );
 }

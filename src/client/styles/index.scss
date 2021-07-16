@@ -2,7 +2,7 @@
 @use "./component-styles";
 @use "./setup";
 
-html, body {
+html, body, #root, #wrapper, main {
   margin: 0;
   width: 100%;
   height: 100%;
@@ -12,19 +12,50 @@ html, body {
   // line-height: 1.5em;
 }
 
-main {
-  padding: c.$main-vertical-padding 0;
-
-  &.is-standalone {
-    min-width: c.$breakpoint-sm;
-    width: 80%;
-    max-width: c.$breakpoint-lg;
+#notifications {
+  & .pf-c-alert {
+    // the wizard has a z-index of 200, this should be high enough ??
+    z-index: 999;
+    width: 40%;
+    margin-top: c.$pf-global--spacer--sm;
   }
 
-  &.is-console {
-    width: 95%;
+  position: absolute;
+  // top: c.$pf-global--spacer--2xl;
+  bottom: 0;
+  right: c.$pf-global--spacer--md;
+  width: 100%;
+
+  margin: c.$pf-global--spacer--lg;
+
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  flex-direction: column;
+}
+
+#page-container {
+  display: flex;
+  justify-content: center;
+  flex-direction: row;
+
+  & > #page-content {
+    // padding: c.$main-vertical-padding 0;
+
+    min-width: c.$breakpoint-sm;
+
+    &.full-width {
+      width: 100%;
+      // flex-basis: 100%;
+    }
+
+    &:not(.full-width) {
+      width: 80%;
+      max-width: c.$breakpoint-xl;
+    }
   }
 }
+
 
 /*
 a {
@@ -37,6 +68,10 @@ a {
 
 .text-black {
   color: black !important;
+}
+
+.text-white {
+  color: white !important;
 }
 
 .text-fg {
@@ -213,8 +248,18 @@ label {
   }
 
   & .pf-c-spinner {
-    --pf-c-spinner--Color: #{c.$light};
+    --pf-c-spinner--Color: #{c.$pf-color-black-200};
   }
+}
+
+.center-x {
+  display: flex;
+  justify-content: center;
+}
+
+.center-y {
+  display: flex;
+  align-items: center;
 }
 
 .centers {

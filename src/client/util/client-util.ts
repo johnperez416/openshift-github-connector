@@ -74,11 +74,10 @@ export async function fetchJSON<
   Res = void
 >(
   method: HttpConstants.Methods, url: Stringable, body?: Req, options: Omit<RequestInit, "body" | "method"> = {}
-): Promise<{ statusCode: number } & Res> {
+): Promise<{ status: number } & Res> {
 
-  const hasBody = body != null;
   let stringifiedBody: string | undefined;
-  if (hasBody) {
+  if (body != null) {
     stringifiedBody = JSON.stringify(body);
   }
 
@@ -86,7 +85,7 @@ export async function fetchJSON<
 
   const headers = {
     ...options.headers,
-    ...HttpConstants.getJSONContentHeaders(stringifiedBody),
+    ...HttpConstants.getJSONHeadersForReq(stringifiedBody),
     [CSRF_HEADER]: consoleCSRFToken,
   };
 
@@ -102,7 +101,7 @@ export async function fetchJSON<
   if (res.status === 204) {
     const resBody = {} as Res;
     return {
-      statusCode: res.status,
+      status: res.status,
       ...resBody,
     };
   }
@@ -114,7 +113,7 @@ export async function fetchJSON<
 
   const resBody = await res.json() as Res;
   return {
-    statusCode: res.status,
+    status: res.status,
     ...resBody,
   };
 }
@@ -128,5 +127,6 @@ export function isInOpenShiftConsole(): boolean {
 }
 
 export function getConsoleModifierClass(): string {
-  return isInOpenShiftConsole() ? "is-console" : "is-standalone";     // "console" class is already used by bootstrap
+  // "console" class is already used by bootstrap so we add 'is'
+  return isInOpenShiftConsole() ? "is-console" : "is-standalone";
 }

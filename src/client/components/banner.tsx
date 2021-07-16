@@ -44,24 +44,24 @@ function Banner(props: Banner.Props): JSX.Element {
       props.className,
       "banner rounded p-3",
       "bg-" + props.severity,
-      "text-" + (props.severity === "warning" ? "black" : "light"),
+      "text-" + ([ "warning", "info" ].includes(props.severity ?? "") ? "black" : "light"),
       { "d-none": !display }
     )}>
       <div className={classNames(
-        "banner-title flex-grow-1 d-flex align-items-center",
+        "banner-title flex-grow-1 center-y",
       )}>
         <div>
           {BannerIcon != null
-            ? <BannerIcon className="fa-lg mr-3" />
+            ? <BannerIcon className="fa-lg me-3" />
             : ("")
           }
         </div>
         <div className="flex-grow-1">
           {props.title}
         </div>
-        <div className="ml-auto">
+        <div className="ms-auto">
           {props.loading
-            ? (<Spinner style={{ height: "1.5em", width: "1.5em" }}/>)
+            ? (<Spinner size="md"/>)
             : ("")
           }
         </div>

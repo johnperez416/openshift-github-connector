@@ -1,4 +1,4 @@
-import { GitHubRepoId } from "./types/gh-types";
+import { GitHubAppPermissions, GitHubRepoId } from "./types/gh-types";
 import ImageRegistry from "./types/image-registries";
 
 namespace ApiRequests {
@@ -10,14 +10,13 @@ namespace ApiRequests {
     appId: number,
   }
 
-  export interface OAuthCallbackData {
+  export interface GitHubOAuthCallbackData {
     code: string,
     state: string,
   }
 
-  export interface SetServiceAccount {
-    // serviceAccountSecret: k8s.V1Secret & { data: ServiceAccountSecretData };
-    serviceAccountToken: string,
+  export interface GetNamespacedResources {
+    namespace: string,
   }
 
   export interface PostInstall {
@@ -44,8 +43,10 @@ namespace ApiRequests {
   }
 
   export interface CreateActionsSecrets {
+    namespace: string,
+    serviceAccount: string,
+    serviceAccountRole: string,
     repos: GitHubRepoId[],
-    createSATokens: boolean,
   }
 
   export interface CreateWorkflow {
@@ -58,6 +59,14 @@ namespace ApiRequests {
     },
     imageRegistryId: string,
     port: number,
+  }
+
+  export interface CreateInstallationToken {
+    namespace: string,
+    secretName: string,
+    overwriteExisting?: boolean,
+    repositories?: string[],
+    permissions?: GitHubAppPermissions,
   }
 }
 

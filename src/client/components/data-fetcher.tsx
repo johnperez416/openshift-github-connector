@@ -4,15 +4,23 @@ import UrlPath from "../../common/types/url-path";
 import { fetchJSON } from "../util/client-util";
 
 interface BaseDataFetcherProps<Data> {
-    children: (data: Data, reload: () => Promise<void>) => React.ReactNode,
-    type: "generic" | "api",
-    loadingDisplay?: "text" | "spinner" | "card" | "card-body" | "none" | JSX.Element,
-    loadingStyle?: React.CSSProperties,
+  /**
+   * Return the content to render after fetching completes successfully.
+   */
+  children: (data: Data, reload: () => Promise<void>) => React.ReactNode,
+  /**
+   * Any additional actions to take after an error, in addition to displaying the error.
+   * If the request failed with an HTTP error, err will have the status code in its 'status' key.
+   */
+  onError?: (err: Record<string, unknown>) => void,
+  type: "generic" | "api",
+  loadingDisplay?: "text" | "spinner" | "card" | "card-body" | "none" | JSX.Element,
+  // loadingStyle?: React.CSSProperties,
 }
 
 interface GenericDataFetcherProps<Data> extends BaseDataFetcherProps<Data> {
     type: "generic",
-    fetchData: () => Promise<Data>,
+    fetchData: (abortSignal: AbortSignal) => Promise<Data>,
 }
 
 interface ApiDataFetcherProps<Data> extends BaseDataFetcherProps<Data> {
@@ -20,7 +28,7 @@ interface ApiDataFetcherProps<Data> extends BaseDataFetcherProps<Data> {
     endpoint: UrlPath,
 }
 
-type DataFetcherProps<Data> = GenericDataFetcherProps<Data> | ApiDataFetcherProps<Data>;
+export type DataFetcherProps<Data> = GenericDataFetcherProps<Data> | ApiDataFetcherProps<Data>;
 
 interface DataFetcherState<Data> {
     data: Data | undefined,
@@ -35,6 +43,8 @@ interface DataFetcherState<Data> {
  * Utility component which can load data asynchronously and then pass the data to children.
  */
 export default class DataFetcher<Data> extends React.Component<DataFetcherProps<Data>, DataFetcherState<Data>> {
+
+  private readonly abortController = new AbortController();
 
   constructor(
     props: DataFetcherProps<Data>,
@@ -51,6 +61,10 @@ export default class DataFetcher<Data> extends React.Component<DataFetcherProps<
     await this.load();
   }
 
+  override async componentWillUnmount(): Promise<void> {
+    this.abortController.abort();
+  }
+
   async load(): Promise<void> {
     this.setState({
       data: undefined,
@@ -61,10 +75,12 @@ export default class DataFetcher<Data> extends React.Component<DataFetcherProps<
     try {
       let data: Data;
       if (this.props.type === "api") {
-        data = await fetchJSON<{}, Data>("GET", this.props.endpoint.path);
+        data = await fetchJSON<never, Data>("GET", this.props.endpoint.path, undefined, {
+          signal: this.abortController.signal,
+        });
       }
       else {
-        data = await this.props.fetchData();
+        data = await this.props.fetchData(this.abortController.signal);
       }
 
       this.setState({
@@ -73,7 +89,14 @@ export default class DataFetcher<Data> extends React.Component<DataFetcherProps<
       });
     }
     catch (err) {
+      if (this.abortController.signal.aborted) {
+        return;
+      }
+
       console.warn(`Error loading data:`, err);
+      if (this.props.onError) {
+        this.props.onError(err);
+      }
       this.setState({ loadingError: err });
     }
     finally {
@@ -85,27 +108,29 @@ export default class DataFetcher<Data> extends React.Component<DataFetcherProps<
   }
 
   override render() {
-    const cardSpinnerSize = "lg";
+    const spinnerSize = "lg";
+    const cardSpinnerSize = "md";
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (this.state == null || !this.state.loaded) {
       const loadingDisplayType = this.props.loadingDisplay ?? "text";
       if (loadingDisplayType === "text") {
         return (
-          <span style={this.props.loadingStyle}>Loading...</span>
+          <span>Loading...</span>
         );
       }
       else if (loadingDisplayType === "spinner") {
-        const loadingStyle = this.props.loadingStyle ?? {};
         return (
-          <Spinner style={loadingStyle} diameter="1em"/>
+          <div className="center-x">
+            <Spinner size={spinnerSize} />
+          </div>
         );
       }
       else if (loadingDisplayType === "card") {
         return (
           <Card style={{ minHeight: "100px" }}>
             <CardBody className="centers">
-              <Spinner style={this.props.loadingStyle ?? {}} size={cardSpinnerSize}/>
+              <Spinner size={cardSpinnerSize}/>
             </CardBody>
           </Card>
         );
@@ -113,7 +138,7 @@ export default class DataFetcher<Data> extends React.Component<DataFetcherProps<
       else if (loadingDisplayType === "card-body") {
         return (
           <CardBody className="centers">
-            <Spinner style={this.props.loadingStyle ?? {}} size={cardSpinnerSize} />
+            <Spinner size={cardSpinnerSize} />
           </CardBody>
         );
       }
@@ -132,7 +157,7 @@ export default class DataFetcher<Data> extends React.Component<DataFetcherProps<
     else if (this.state.data == null) {
       return (
         <p className="text-danger">
-          Data to fetch was {this.state.data}.
+          Failed to fetch: Response body empty.
         </p>
       );
     }

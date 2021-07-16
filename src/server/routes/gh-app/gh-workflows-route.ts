@@ -6,10 +6,8 @@ import ApiRequests from "common/api-requests";
 import ApiResponses from "common/api-responses";
 import Log from "server/logger";
 import { getFriendlyHTTPError, tob64 } from "server/util/server-util";
-import { sendError } from "server/util/send-error";
 import KubeWrapper from "server/lib/kube/kube-wrapper";
 import { GitHubContentFile, getSecretsUrlForRepo } from "common/types/gh-types";
-import User from "server/lib/user";
 import { editWorkflow, getStarterWorkflowContents } from "server/lib/github/starter-workflow";
 import { createActionsSecret } from "server/lib/github/gh-util";
 import { DEFAULT_SECRET_NAMES } from "common/default-secret-names";
@@ -41,19 +39,19 @@ router.route(ApiEndpoints.App.Workflows.path)
     // workflow permission scope exists in edit app page but not in documentation
     // https://docs.github.com/en/rest/reference/permissions-required-for-github-apps#permission-on-single-file
 
-    const user = await User.getUserForSession(req, res);
+    const user = await req.getUserOr401();
     if (!user) {
       return undefined;
     }
 
-    const installation = await User.getInstallationForSession(req, res);
+    const installation = user.installation;
     if (!installation) {
-      return undefined;
+      return res.sendError(400, `No installation for user ${user.name}`);
     }
 
     const imageRegistry = user.imageRegistries.getById(req.body.imageRegistryId);
     if (!imageRegistry) {
-      return sendError(res, 404, `Image registry with Id ${req.body.imageRegistryId} was not found`);
+      return res.sendError(404, `Image registry with Id ${req.body.imageRegistryId} was not found`);
     }
 
     await createActionsSecret(
@@ -94,8 +92,8 @@ router.route(ApiEndpoints.App.Workflows.path)
       Log.info(`${workflowFilePath} already exists`);
 
       if (!req.body.overwriteExisting) {
-        return sendError(
-          res, 409,
+        return res.sendError(
+          409,
           `"${workflowFilePath}" already exists in repository ${req.body.repo.full_name}`, "warning"
         );
       }
@@ -133,7 +131,9 @@ router.route(ApiEndpoints.App.Workflows.path)
     });
 
     // const newWorkflowFileName = writeRes.data.content.name;
-    const newWorkflowFileUrl = writeRes.data.content.html_url;
+
+    // eslint-disable-next-line
+    const newWorkflowFileUrl = writeRes.data.content?.html_url ?? repoMeta.html_url;
 
     const resBody: ApiResponses.WorkflowCreationResult = {
       message: `Successfully created registry password secret, `

@@ -1,12 +1,13 @@
-import { V1ObjectMeta, V1Secret, V1SecretList } from "@kubernetes/client-node";
+import * as k8s from "@kubernetes/client-node";
 
 import Log from "server/logger";
 import HttpConstants from "common/http-constants";
 import { GitHubRepoId } from "common/types/gh-types";
-import { getFriendlyHTTPError, objValuesFromb64, objValuesTob64, toValidK8sName } from "server/util/server-util";
+import { getFriendlyHTTPError, objValuesFromb64, objValuesTob64 } from "server/util/server-util";
 import KubeWrapper, { ServiceAccountToken } from "./kube-wrapper";
+import { toValidK8sName } from "common/common-util";
 
-const APP_NAME = "openshift-actions-connector";
+const APP_NAME = "openshift-github-connector";
 
 const ANNOTATION_CREATED_AT = "created-at";
 const ANNOTATION_UPDATED_AT = "updated-at";
@@ -15,29 +16,70 @@ const ANNOTATION_SERVICEACCOUNT_NAME = "kubernetes.io/service-account.name";
 export type SimpleValue = number | string | boolean | undefined;
 
 namespace SecretUtil {
+  export const CONNECTOR_LABEL_NAMESPACE = "github-connector.openshift.io";
+  // type ConnectorLabelName = `${typeof CONNECTOR_LABEL_NAMESPACE}/${string}`;
+
+  const SUBTYPE_LABEL = `${CONNECTOR_LABEL_NAMESPACE}/subtype`;
+
   export enum Subtype {
     APP = "app",
     USER = "user",
     SA_TOKEN = "repo-serviceaccount-token",
+    INSTALL_TOKEN = "github-installation-token",
   }
 
-  const SECRET_LABELS = {
-    app: APP_NAME,
-    "app.kubernetes.io/part-of": APP_NAME,
-    "app.kubernetes.io/managed-by": APP_NAME,
-  };
+  export function getSubtypeSelector(subtype: Subtype): string {
+    return `${SUBTYPE_LABEL}=${subtype}`;
+  }
+
+
+  export function getSecretLabels(subtype: Subtype, createdBy: string): Record<string, string> {
+    return {
+      // "app.kubernetes.io/part-of": APP_NAME,
+      "app.kubernetes.io/managed-by": APP_NAME,
+      [SUBTYPE_LABEL]: subtype,
+      [CONNECTOR_LABEL_NAMESPACE + "/created-by"]: toValidK8sName(createdBy),
+    };
+  }
+
+  /**
+   *
+   * @returns A k8s client authenticated using the service account token in the pod.
+   * Use this to manage "internal" secrets using the service account's permissions, in the connector namespace.
+   */
+  export function getSAClient(): k8s.CoreV1Api {
+    return KubeWrapper.instance.config.makeApiClient(k8s.CoreV1Api);
+  }
+
+  export function getSAName(): string {
+    return KubeWrapper.instance.serviceAccountName;
+  }
+
+  /**
+   *
+   * @returns The namespaced used for the connector's internal "storage secrets". NOT for user secrets!
+   */
+  export function getStorageSecretsNamespace(): string {
+    return KubeWrapper.instance.ns;
+  }
 
   export async function createSecret(
-    secretName: string, data: Record<string, SimpleValue>,
-    labels: { [key: string]: string, subtype: Subtype }
+    client: k8s.CoreV1Api,
+    namespace: string,
+    secretName: string,
+    data: Record<string, SimpleValue>,
+    createdBy: string,
+    subtype: Subtype,
+    options: {
+      labels?: Record<string, string>,
+      annotations?: Record<string, string>,
+    } = {}
   ): Promise<void> {
-    await SecretUtil.deleteSecret(secretName, false);
-
     Log.info(`Creating secret ${secretName}`);
 
     const now = new Date().toISOString();
 
-    const secretResult = await KubeWrapper.instance.coreClient.createNamespacedSecret(KubeWrapper.instance.ns, {
+    const secretResult = await client.createNamespacedSecret(namespace, {
       type: "Opaque",
       metadata: {
         name: secretName,
@@ -45,12 +87,12 @@ namespace SecretUtil {
         annotations: {
           [ANNOTATION_CREATED_AT]: now,
           [ANNOTATION_UPDATED_AT]: now,
-          // ...annotations,
+          ...options.annotations,
         },
         labels: {
-          ...SECRET_LABELS,
-          ...labels,
-        },
+          ...options.labels,
+          ...getSecretLabels(subtype, createdBy),
+        }
       },
       data: objValuesTob64(data, false),
     });
@@ -58,18 +100,23 @@ namespace SecretUtil {
     Log.info(`Created ${secretResult.body.metadata?.namespace}/${secretResult.body.kind}/${secretResult.body.metadata?.name}`);
   }
 
-  export async function patchSecret(secretName: string, data: Record<string, SimpleValue>): Promise<V1Secret> {
-    const secrets = await KubeWrapper.instance.coreClient.listNamespacedSecret(KubeWrapper.instance.ns);
+  export async function patchSecret(
+    client: k8s.CoreV1Api,
+    namespace: string,
+    secretName: string,
+    data: Record<string, SimpleValue>
+  ): Promise<k8s.V1Secret> {
+    const secrets = await client.listNamespacedSecret(namespace);
 
     const secretExists = secrets.body.items.find((secret) => secret.metadata?.name === secretName);
 
     if (!secretExists) {
-      throw new Error(`Secret "${secretName}" not found in namespace "${KubeWrapper.instance.ns}"`);
+      throw new Error(`Secret "${secretName}" not found in namespace "${namespace}"`);
     }
 
-    const patchResult = await KubeWrapper.instance.coreClient.patchNamespacedSecret(
+    const patchResult = await client.patchNamespacedSecret(
       secretName,
-      KubeWrapper.instance.ns, {
+      namespace, {
         metadata: {
           [ANNOTATION_UPDATED_AT]: new Date().toISOString(),
         },
@@ -88,14 +135,14 @@ namespace SecretUtil {
   }
 
   export async function loadFromSecret<T extends Record<string, string | undefined>>(
+    client: k8s.CoreV1Api,
+    namespace: string,
     secretName: string
-  ): Promise<({ data: T, metadata: V1ObjectMeta }) | undefined> {
-
-    const ns = KubeWrapper.instance.ns;
+  ): Promise<({ data: T, metadata: k8s.V1ObjectMeta }) | undefined> {
 
     Log.info(`Loading secret ${secretName}`);
 
-    const secretsList = await KubeWrapper.instance.coreClient.listNamespacedSecret(ns);
+    const secretsList = await client.listNamespacedSecret(namespace);
     const secret = secretsList.body.items.find((secret) => secret.metadata?.name === secretName);
     if (!secret) {
       return undefined;
@@ -120,10 +167,10 @@ namespace SecretUtil {
     }
   }
 
-  export async function deleteSecret(secretName: string, throwOnErr: boolean): Promise<boolean> {
+  export async function deleteSecret(client: k8s.CoreV1Api, namespace: string, secretName: string): Promise<boolean> {
     Log.info(`Trying to delete ${secretName}`);
     try {
-      await KubeWrapper.instance.coreClient.deleteNamespacedSecret(secretName, KubeWrapper.instance.ns);
+      await client.deleteNamespacedSecret(secretName, namespace);
       Log.info(`Deleted ${secretName}`);
       return true;
     }
@@ -133,19 +180,15 @@ namespace SecretUtil {
         return false;
       }
 
-      if (throwOnErr) {
-        throw err;
-      }
-      else {
-        Log.warn(`Error deleting ${secretName}`, err);
-        return false;
-      }
+      throw err;
     }
   }
 
-  export async function getSecretsMatchingSelector(labelSelector: string): Promise<V1SecretList> {
-    const secrets = await KubeWrapper.instance.coreClient.listNamespacedSecret(
-      KubeWrapper.instance.ns,
+  export async function getSecretsMatchingSelector(client: k8s.CoreV1Api, namespace: string, labelSelector: string): Promise<k8s.V1SecretList> {
+    Log.info(`Get secrets in namespace ${namespace} with selector ${labelSelector}`);
+
+    const secrets = await client.listNamespacedSecret(
+      namespace,
       undefined, undefined, undefined, undefined,
       labelSelector,
     );
@@ -163,34 +206,26 @@ namespace SecretUtil {
   }
   */
 
-  const LABEL_CREATED_FOR_REPO_ID = "created-for-github-repo-id";
+  const LABEL_CREATED_FOR_REPO_ID = CONNECTOR_LABEL_NAMESPACE + "/repo-id";
 
-  export async function createSAToken(serviceAccountName: string, repo: GitHubRepoId,
-    meta: {
-      createdByApp: string,
-      createdByAppId: string,
-      createdByUser: string,
-      createdByUserId: string,
-    }
+  export async function createSAToken(
+    userClient: k8s.CoreV1Api,
+    namespace: string,
+    serviceAccountName: string,
+    repo: GitHubRepoId,
+    createdBy: string,
   ): Promise<ServiceAccountToken> {
-		const saTokenSecretName = toValidK8sName(`${serviceAccountName}-token-${repo.id}`);
-
-    const subtype: Subtype = Subtype.SA_TOKEN;
+		const saTokenSecretName = toValidK8sName(`github-repo-sa-token-${repo.id}`);
 
     const labels = {
-      ...SECRET_LABELS,
+      ...getSecretLabels(Subtype.SA_TOKEN, createdBy),
       [LABEL_CREATED_FOR_REPO_ID]: repo.id.toString(),
-      "created-for-github-repo": toValidK8sName(`${repo.owner}/${repo.name}`),
-      "created-by-github-app-id": meta.createdByAppId,
-      "created-by-github-app": toValidK8sName(meta.createdByApp),
-      "created-by-github-user-id": meta.createdByUserId,
-      "created-by-github-user": toValidK8sName(meta.createdByUser),
-      subtype,
+      [CONNECTOR_LABEL_NAMESPACE + "/repo"]:  toValidK8sName(`${repo.full_name}`),
     };
 
     let saTokenSecretBody;
     try {
-      const existing = await SecretUtil.loadFromSecret(saTokenSecretName);
+      const existing = await SecretUtil.loadFromSecret(userClient, namespace, saTokenSecretName);
       if (existing?.metadata.labels) {
         const match = existing.metadata.labels[LABEL_CREATED_FOR_REPO_ID] === labels[LABEL_CREATED_FOR_REPO_ID];
         if (match) {
@@ -209,8 +244,8 @@ namespace SecretUtil {
     if (!saTokenSecretBody) {
       try {
         Log.info(`Creating SA Token "${saTokenSecretName}`);
-        const createSATokenRes = await KubeWrapper.instance.coreClient.createNamespacedSecret(
-          KubeWrapper.instance.ns, {
+        const createSATokenRes = await userClient.createNamespacedSecret(
+          namespace, {
             metadata: {
               name: saTokenSecretName,
               annotations: {
@@ -227,12 +262,20 @@ namespace SecretUtil {
           + `${createSATokenRes.body.metadata?.namespace}/${createSATokenRes.body.kind}/${createSATokenRes.body.metadata?.name}`
         );
 
-        const newSecret = await SecretUtil.loadFromSecret(saTokenSecretName);
+        let newSecret = await SecretUtil.loadFromSecret(userClient, namespace, saTokenSecretName);
+        let tries = 1;
+        while (!newSecret && tries++ <= 10) {
+          // after the SA token secret is created, it takes a few moments for the controller to update it with its SA token data.
+          Log.info(`Failed to get secret after it was just created, retrying...`);
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          newSecret = await SecretUtil.loadFromSecret(userClient, namespace, saTokenSecretName);
+
+        }
         if (!newSecret) {
-          // It appears there is a timing issue where the secret will not have data for a very short time after it is created.
-          // We will have to handle this with a delay or a retry.
           throw new Error(`Failed to load secret "${saTokenSecretName}" after it was just created`);
         }
+        Log.info(`Got SA token secret after ${tries} tries`);
         saTokenSecretBody = newSecret;
       }
       catch (err) {
@@ -250,11 +293,6 @@ namespace SecretUtil {
     const metadata = saTokenSecretBody.metadata;
     if (!metadata) {
       throw new Error(`No metadata provided in create serviceaccount token response`);
-    }
-
-    const namespace = metadata.namespace;
-    if (!namespace) {
-      throw new Error(`Service account namespace was not present in metadata`);
     }
 
     const annotations = metadata.annotations;

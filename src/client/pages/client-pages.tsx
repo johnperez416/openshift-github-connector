@@ -1,74 +1,87 @@
 import React from "react";
-import { Redirect, Route, RouteComponentProps } from "react-router-dom";
+import {
+  Link, Redirect, Route,
+} from "react-router-dom";
+
 import UrlPath from "../../common/types/url-path";
 import ClusterPage from "./cluster-page";
 import GitHubAppPage from "./gh-app-page";
-import SetupWelcomePage from "./setup/welcome-page";
 import SelectReposPage from "./setup/connect-repos-page";
-import SetupAppPage from "./setup/gh-app/setup-app";
-import * as PostCreateAppPages from "./setup/gh-app/post-create-app";
 import HomePage from "./home-page";
-import SetupFinishedPage from "./setup/setup-completion-page";
-import AddWorkflowsPage from "./add-workflows-page";
 import ImageRegistriesPage from "./image-registries-page";
-import { getSetupSteps } from "./setup/setup-header";
 import { isInOpenShiftConsole } from "../util/client-util";
+import { UserPage } from "./user";
+import { BasePage } from "./base-page";
+import SetupWizard, { getSetupPagePath } from "./setup/setup";
+import AddWorkflowsPage from "./add-workflows-page";
+import SetupFinishedPage from "./setup/setup-completion-page";
+import { PostCreateAppCallbackPage, InstalledAppPage } from "./setup/gh-app/app-callbacks";
+
+export type ClientPageOptions = Partial<{
+  fullWidth: boolean,
+}>;
 
 export class ClientPage extends UrlPath {
   constructor(
     parentPath: UrlPath | undefined,
     endpoint: string,
-    // type copied from <Route component=> prop
-    public readonly component: React.ComponentType<RouteComponentProps<any>> | React.ComponentType<any>,
+    public readonly title: string,
+    public readonly component: React.ComponentType<any>,
+    private readonly exact: boolean = true,
+    private readonly options: ClientPageOptions = {},
   ) {
     super(parentPath, endpoint);
   }
 
   public get route(): JSX.Element {
     return (
-      <Route key={this.path} exact path={this.path} component={this.component} />
+      <Route key={this.path} exact={this.exact} path={this.path} render={(props) => (
+        <BasePage options={this.options} content={this.component} title={this.title} {...props} />
+      )}/>
     );
-  }
-
-  public withQuery(query: Record<string, string>): string {
-    const qp = new URLSearchParams(query);
-    return this.path + `?${qp.toString()}`;
   }
 }
 
 const appRootPath = isInOpenShiftConsole() ? "/github-connector" : "/";
 
-const Home = new ClientPage(undefined, appRootPath, HomePage);
+const Home = new ClientPage(undefined, appRootPath, "", HomePage);
+const User = new ClientPage(Home, "/user", "User", UserPage);
 
-const Setup = new ClientPage(Home, "/setup", () => (<Redirect to={getSetupSteps()[0].path} />));
-const SetupWelcome = new ClientPage(Setup, "/welcome", SetupWelcomePage);
-const SetupCreateApp = new ClientPage(Setup, "/app", SetupAppPage);
-const SetupCreatingApp = new ClientPage(Setup, "/creating-app", PostCreateAppPages.CreatingAppPage);
-// const SetupPostOAuth = new ClientPage(Setup, "/oauth-callback", PostOAuthPage);
-const SetupInstalledApp = new ClientPage(Setup, "/installed-app", PostCreateAppPages.InstalledAppPage);
-const SetupFinished = new ClientPage(Setup, "/done", SetupFinishedPage);
+const Setup = new ClientPage(Home, "/setup/:page", "Set up", SetupWizard, false, { fullWidth: true });
+const SetupIndex = new ClientPage(Home, "/setup", "Set up", () => (<Redirect to={getSetupPagePath("WELCOME")} />));
+const CreatingAppCallback = new ClientPage(Home, "/app-callback", "Created App", PostCreateAppCallbackPage);
+const InstalledAppCallback = new ClientPage(Home, "/installation-callback", "Installed App", InstalledAppPage);
+const SetupFinished = new ClientPage(Home, "/setup-complete", "Setup Complete", SetupFinishedPage);
 
-const AddWorkflows = new ClientPage(Home, "/add-workflows", AddWorkflowsPage);
-const App = new ClientPage(Home, "/app", GitHubAppPage);
-const ConnectRepos = new ClientPage(Home, "/connect-repos", SelectReposPage);
-const Cluster = new ClientPage(Home, "/cluster", ClusterPage);
+const App = new ClientPage(Home, "/app", "GitHub App", GitHubAppPage);
 
-const ImageRegistries = new ClientPage(Home, "/image-registries", ImageRegistriesPage);
+const AddWorkflows = new ClientPage(Home, "/add-workflows", "Add Workflows", AddWorkflowsPage);
+const ConnectRepos = new ClientPage(Home, "/connect-repos", "Connect Repositories", SelectReposPage);
+const Cluster = new ClientPage(Home, "/cluster", "Cluster Info", ClusterPage);
 
-const NotImplemented = new ClientPage(Home, "/not-implemented", (() => {
-  return (<h2>This page {"doesn't"} exist yet</h2>);
+const ImageRegistries = new ClientPage(Home, "/image-registries", "Image Registries", ImageRegistriesPage);
+
+const NotImplemented = new ClientPage(Home, "/not-implemented", "Not Implemented", (() => {
+  return (
+    <>
+      <h2>This page {"doesn't"} exist yet</h2>
+      <Link to={Home.path}>Go Home</Link>
+    </>
+  );
 }));
 
 const ClientPages = {
-  Welcome: SetupWelcome,
+  // Welcome: SetupWelcome,
   Home,
+  // Login,
+  User,
 
+  SetupIndex,
   Setup,
-  SetupCreateApp,
-  SetupCreatingApp,
-  // SetupPostOAuth,
-  SetupInstalledApp,
+  CreatingAppCallback,
+  InstalledAppCallback,
   SetupFinished,
+
   ConnectRepos,
 
   App,
