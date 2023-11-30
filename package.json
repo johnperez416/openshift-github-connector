@@ -39,7 +39,7 @@
     "helm-install": "export RELEASE_NAME=github-connector && helm upgrade --install --create-namespace $RELEASE_NAME chart/openshift-github-connector"
   },
   "dependencies": {
-    "@kubernetes/client-node": "^0.18.1",
+    "@kubernetes/client-node": "^0.15.0",
     "@octokit/auth-app": "^3.5.3",
     "@octokit/core": "^3.5.1",
     "@octokit/openapi-types": "^8.2.1",
