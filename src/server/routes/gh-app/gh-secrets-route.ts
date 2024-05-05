@@ -9,26 +9,22 @@ import KubeWrapper from "server/lib/kube/kube-wrapper";
 import Log from "server/logger";
 import SecretUtil from "server/lib/kube/secret-util";
 import { Severity } from "common/common-util";
-import { DEFAULT_SECRET_NAMES, getDefaultSecretNames } from "common/default-secret-names";
 import { send405 } from "server/express-extends";
+import KubeUtil from "server/lib/kube/kube-util";
+import { DEFAULT_SECRET_NAMES } from "common/default-secret-names";
 
 const router = express.Router();
 
 router.route(ApiEndpoints.App.Repos.Secrets.path)
   .get(async (
-    req: express.Request<any, ApiResponses.ReposSecretsStatus, void /* ApiRequests.RepoIDsList */>,
+    req: express.Request,
     res: express.Response<ApiResponses.ReposSecretsStatus>,
     next
   ) => {
 
-    const user = await req.getUserOr401();
-    if (!user) {
-      return res.send401();
-    }
-
-    const installation = user.installation;
+    const installation = await req.getInstallationOr400();
     if (!installation) {
-      return res.sendError(400, `No installation for user ${user.name}`);
+      return undefined;
     }
 
     /*
@@ -65,9 +61,12 @@ router.route(ApiEndpoints.App.Repos.Secrets.path)
 
         const hasRegistrySecret = secretNames.includes(DEFAULT_SECRET_NAMES.registryPassword);
 
+        const hasNamespaceSecret = secretNames.includes(DEFAULT_SECRET_NAMES.namespace);
+
         return {
           repo,
           hasClusterSecrets,
+          hasNamespaceSecret,
           hasRegistrySecret,
           secrets,
         };
@@ -75,7 +74,7 @@ router.route(ApiEndpoints.App.Repos.Secrets.path)
     );
 
     return res.json({
-      defaultSecretNames: getDefaultSecretNames(),
+      // DEFAULT_SECRET_NAMES: DEFAULT_SECRET_NAMES,
       repos: reposWithSecrets,
       urls: installation.urls,
     });
@@ -96,25 +95,23 @@ router.route(ApiEndpoints.App.Repos.Secrets.path)
     }
 
     const {
-      namespace, serviceAccount, repos,
+      project: namespace, createNamespaceSecret, serviceAccount, serviceAccountRole, repos,
     } = req.body;
 
     const k8sClient = user.makeCoreV1Client();
 
-    const saExists = await KubeWrapper.doesServiceAccountExist(k8sClient, namespace, serviceAccount);
+    const saExists = await KubeUtil.doesServiceAccountExist(k8sClient, namespace, serviceAccount);
 
     let serviceAccountCreated = false;
     if (!saExists) {
-      Log.info(`Creating ${namespace}/serviceaccount/${serviceAccount}`);
 
-      await k8sClient.createNamespacedServiceAccount(namespace, {
-        metadata: {
-          name: serviceAccount,
-          labels: {
-            "created-by": user.name,
-          },
-        },
-      });
+      await KubeUtil.createServiceAccount(
+        user.makeKubeConfig(),
+        user.name,
+        namespace,
+        serviceAccount,
+        serviceAccountRole
+      );
 
       serviceAccountCreated = true;
     }
@@ -187,6 +184,14 @@ router.route(ApiEndpoints.App.Repos.Secrets.path)
         { name: DEFAULT_SECRET_NAMES.clusterServerUrl, plaintextValue: clusterServerUrl },
         { name: DEFAULT_SECRET_NAMES.clusterToken, plaintextValue: saToken.token },
       ];
+
+      if (createNamespaceSecret) {
+        secretsToCreate.push({ name: DEFAULT_SECRET_NAMES.namespace, plaintextValue: namespace });
+        Log.info(`Creating namespace secret with namespace ${namespace}`);
+      }
+      else {
+        Log.info(`Not creating namespace secret`);
+      }
 
       Log.info(`Creating ${secretsToCreate.length} secrets into ${repo.owner}/${repo.name}`);
       Log.info(`SA token to be used is "${saToken.tokenSecretName}"`);
@@ -263,6 +268,7 @@ router.route(ApiEndpoints.App.Repos.Secrets.path)
       serviceAccount: {
         created: serviceAccountCreated,
         name: serviceAccount,
+        role: serviceAccountRole,
         namespace,
       },
       successes,
@@ -271,14 +277,16 @@ router.route(ApiEndpoints.App.Repos.Secrets.path)
   })
   .all(send405([ "GET", "POST" ]));
 
+/*
 router.route(ApiEndpoints.App.Repos.RepoSecretDefaults.path)
   .get(async (
     req,
     res: express.Response<ApiResponses.DefaultSecretsResponse>,
     next
   ) => {
-    return res.json(getDefaultSecretNames());
+    return res.json(DEFAULT_SECRET_NAMES);
   })
   .all(send405([ "GET" ]));
+*/
 
 export default router;

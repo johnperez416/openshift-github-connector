@@ -1,109 +1,102 @@
-import React, { useContext, useState } from "react";
-import { Link } from "react-router-dom";
 import {
-  Alert, Brand,
-  Page, PageHeader, PageHeaderTools, PageSection,
-  PageSidebar, Title, AlertActionCloseButton,
+  Brand, Page, PageHeader, PageHeaderTools,
+  PageSection,
 } from "@patternfly/react-core";
 import { UserAltIcon } from "@patternfly/react-icons";
-
 import classNames from "classnames";
+import React, {
+  createContext, useContext, useMemo, useState,
+} from "react";
+import { Link } from "react-router-dom";
+import AlertDisplayer, { AlertInfo } from "../components/alerts";
+import NotificationErrorBoundary from "../components/err-notification-boundary";
 import { getTitle } from "../components/title";
+import { ConnectorUserContext, PushAlertContext } from "../contexts";
 import ClientPages, { ClientPageOptions } from "./client-pages";
-import {
-  OpenShiftUserContext, InConsoleContext, AlertInfo, PushAlertContext,
-} from "../contexts";
+import { getSidebarPages, MySidebar } from "./sidebar";
 
-export function BasePage(
-  { title, options, content: Content }:
-  { title: string, options: ClientPageOptions, content: React.ComponentType<any> }
-): JSX.Element {
+/**
+ * Provides an API to pages to force-expand the sidebar to draw a user's attention to it.
+ */
+export const ExpandSidebarContext = createContext({ expand: () => { /* no-op */ } });
+
+export function BasePage(props: {
+  // title, options, children,
+  title: string, options: ClientPageOptions, children: React.ReactNode,
+}): JSX.Element {
+
+  const { user } = useContext(ConnectorUserContext);
+
+  const sidebarPages = useMemo(() => getSidebarPages(user), [ user ]);
+
+  const canUseNav = sidebarPages.top.concat(sidebarPages.bottom).length > 0;
+
   const [ isNavOpen, setIsNavOpen ] = useState(false);
 
   const [ alerts, setAlerts ] = useState<AlertInfo[]>([]);
 
+  /*
   const inConsole = useContext(InConsoleContext);
-  const { user } = useContext(OpenShiftUserContext);
 
   if (inConsole) {
     return (
-      <Content />
+      <>
+        <PushAlertContext.Provider value={(newAlert: AlertInfo) => setAlerts(alerts.concat(newAlert))}>
+          <NotificationErrorBoundary severity="danger">
+            {props.children}
+          </NotificationErrorBoundary>
+          <AlertDisplayer alerts={alerts} setAlerts={(newAlerts) => setAlerts(newAlerts)} />
+        </PushAlertContext.Provider>
+      </>
     );
   }
+  */
 
   return (
     <>
-      {getTitle(title)}
+      {getTitle(props.title)}
 
-      <Page
-        mainContainerId="page-container"
-        header={
-          <PageHeader
-            logo={
-              <div className="center-y">
-                <Brand alt="OpenShift logo" src="/img/openshift.svg" style={{ height: "2.5rem" }}/>
-              </div>
-            }
-            logoProps={{
-              href: "/",
-            }}
-            headerTools={
-              <PageHeaderTools>
-                <Link to={ClientPages.User.path} className="hover-box p-2 text-white center-y" >
-                  <div className="me-3">
-                    {user.name}
-                  </div>
-                  <UserAltIcon style={{ fontSize: "2rem" }}/>
-                </Link>
-              </PageHeaderTools>
-            }
-            showNavToggle
-            isNavOpen={isNavOpen}
-            onNavToggle={() => setIsNavOpen(!isNavOpen)}
-          />
-        }
-        sidebar={
-          <PageSidebar
-            nav={
-              <>
-                <Title headingLevel="h3">Navigation</Title>
-              </>
-            }
+      <ExpandSidebarContext.Provider value={{ expand: () => setIsNavOpen(true) } }>
 
-            isNavOpen={isNavOpen}
-          />
-        }>
-        <PushAlertContext.Provider value={(newAlert: AlertInfo) => setAlerts([ ...alerts, newAlert ])}>
-          <PageSection id="page-content" className={classNames({ "full-width": options.fullWidth })}>
-            <Content />
-          </PageSection>
-          <div id="notifications" >
-            {
-              alerts.map((alert, i) => (
-                <Alert key={i} variant={alert.severity} title={alert.title}
-                  timeout={5000}
-                  onTimeout={() => {
-                    const alertsCopy = [ ...alerts ];
-                    alertsCopy.splice(i, 1);
-                    setAlerts(alertsCopy);
-                  }}
-                  actionClose={
-                    <AlertActionCloseButton
-                      onClose={() => {
-                        const alertsCopy = [ ...alerts ];
-                        alertsCopy.splice(i, 1);
-                        setAlerts(alertsCopy);
-                      }}
-                    />
-                  }
-                >
-                  {alert.body ? <p>{alert.body}</p> : ""}
-                </Alert>
-              ))
-            }
-          </div>
-        </PushAlertContext.Provider>
-      </Page>
+        <Page
+          mainContainerId="page-container"
+          header={
+            <PageHeader
+              logo={
+                <div className="center-y">
+                  <Brand alt="OpenShift logo" src="/img/openshift.svg" style={{ height: "2.5rem" }}/>
+                </div>
+              }
+              logoProps={{
+                href: "/",
+              }}
+              headerTools={
+                <PageHeaderTools>
+                  <Link to={ClientPages.User.path} className="hover-box p-2 text-white center-y" >
+                    <div className="me-3">
+                      {user.name}
+                    </div>
+                    <UserAltIcon style={{ fontSize: "2rem" }}/>
+                  </Link>
+                </PageHeaderTools>
+              }
+              showNavToggle={canUseNav}
+              isNavOpen={isNavOpen}
+              onNavToggle={() => setIsNavOpen(!isNavOpen)}
+            />
+          }
+          sidebar={<MySidebar isNavOpen={isNavOpen} sidebarPages={sidebarPages} /> }
+        >
+          <PushAlertContext.Provider value={(newAlert: AlertInfo) => setAlerts(alerts.concat(newAlert))}>
+            <PageSection id="page-content" className={classNames({ "full-width": props.options.fullWidth })}>
+              <NotificationErrorBoundary severity="danger">
+                {props.children}
+              </NotificationErrorBoundary>
+            </PageSection>
+            <AlertDisplayer alerts={alerts} setAlerts={(newAlerts) => setAlerts(newAlerts)} />
+          </PushAlertContext.Provider>
+        </Page>
+      </ExpandSidebarContext.Provider>
     </>
   );
 }

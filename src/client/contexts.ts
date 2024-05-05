@@ -1,20 +1,19 @@
 import { createContext } from "react";
-import { Severity } from "../common/common-util";
-import { OpenShiftUserInfo } from "../common/types/user-types";
+import { ConnectorUserInfo } from "../common/types/user-types";
+import { AlertInfo } from "./components/alerts";
 
-export const OpenShiftUserContext = createContext<{
-  user: OpenShiftUserInfo,
+export const RELOAD_USER_SEARCH = "reload-user";
+
+export const ConnectorUserContext = createContext<{
+  user: ConnectorUserInfo & { hasCompletedSetup: boolean },
   reload:(() => Promise<void>),
-    }>({} as any);
+}>({} as any);
 
 // export const GitHubUserContext = React.createContext<{
 //   githubUser: ConnectorGitHubUserInfo,
 // }>({} as any);
 
 export const InConsoleContext = createContext<boolean>(false);
-
-// The Alerts are set up in base-page.tsx
-export type AlertInfo = { severity: Severity, title: string, body?: string };
 
 export const PushAlertContext = createContext<(alert: AlertInfo) => void>(
   // eslint-disable-next-line no-console
