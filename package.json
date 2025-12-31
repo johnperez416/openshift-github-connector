@@ -39,7 +39,7 @@
     "helm-install": "export RELEASE_NAME=github-connector && helm upgrade --install --create-namespace $RELEASE_NAME chart/openshift-github-connector"
   },
   "dependencies": {
-    "@kubernetes/client-node": "^0.15.0",
+    "@kubernetes/client-node": "^1.0.0",
     "@octokit/auth-app": "^3.5.3",
     "@octokit/core": "^3.5.1",
     "@octokit/openapi-types": "^8.2.1",
@@ -53,7 +53,7 @@
     "cookie-parser": "^1.4.5",
     "cors": "^2.8.5",
     "dotenv": "^10.0.0",
-    "express": "^4.17.1",
+    "express": "^4.22.0",
     "express-async-errors": "^3.1.1",
     "express-session": "^1.17.2",
     "http-proxy-middleware": "^2.0.0",
